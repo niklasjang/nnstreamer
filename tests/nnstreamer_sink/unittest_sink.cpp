@@ -156,7 +156,7 @@ typedef struct
   GstTensorConfig tensor_config; /**< tensor config from negotiated caps */
   GstTensorsConfig tensors_config; /**< tensors config from negotiated caps */
   TestOption option; /**< test option */
-  guint buffer_index; /**< index of buffers sent by appsrc */
+  gint buffer_index; /**< index of buffers sent by appsrc */
 } TestData;
 
 /**
