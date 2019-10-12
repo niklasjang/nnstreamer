@@ -128,7 +128,7 @@ typedef enum
  */
 typedef struct
 {
-  guint num_buffers; /**< count of buffers */
+  gint num_buffers; /**< count of buffers */
   TestType test_type; /**< test pipeline */
   tensor_type t_type; /**< tensor type */
   char *tmpfile; /**< tmpfile to write */
