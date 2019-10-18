@@ -190,21 +190,22 @@ is_getTransformSize (void **pdata, const GstTensorsConfig * config,
 }
 
 static void
-color (image_segments *idata, GstMapInfo* out_info)
+setColorAccourdingToLabel (image_segments *idata, GstMapInfo* out_info)
 {
   uint32_t *frame = (uint32_t *) out_info->data;
   uint32_t *pos;
   int i, j;
-
+  const uint32_t labelColor[21]={
+    0xFF000080, 0xFF800000, 0xFFFFEFD5, 0xFF40E0D0, 0xFFFFA500,
+    0xFF00FF00, 0xFFDC143C, 0xFFF0F8FF, 0xFF008000, 0xFFEE82EE, 
+    0xFF808080, 0xFF4169E1, 0xFF008080, 0xFFFF6347, 0xFF000000, 
+    0xFFFF4500, 0xFFDA70D6, 0xFFEEE8AA, 0xFF98FB98, 0xFFAFEEEE, 
+    0xFFFFF5EE };
   for (i = 0; i < idata->height; i++) {
     for (j = 0; j < idata->width; j++) {
       int label_idx = idata->segment_map[i][j];
       pos = &frame[i*idata->width +j];
-      if (label_idx != 0) {
-        *pos = 0x88000033;
-      } else {
-        *pos = 0x00000000;
-      }
+      *pos = labelColor[label_idx];
     }
   }
 }
@@ -268,7 +269,7 @@ is_decode (void **pdata, const GstTensorsConfig * config,
     set_segment_map (idata, input->data);
   }
 
-  color (idata, &out_info);
+  setColorAccourdingToLabel (idata, &out_info);
 
   gst_memory_unmap (out_mem, &out_info);
 
