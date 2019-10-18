@@ -37,7 +37,7 @@ void fini_is (void) __attribute__ ((destructor));
 
 #define TOTAL_LABELS          21
 #define TFLITE_IMAGE_SIZE     257
-#define DETECTION_THRESHOLD   (.5f)
+#define DETECTION_THRESHOLD   (0.5f)
 
 typedef enum
 {
@@ -233,7 +233,7 @@ set_segment_map (image_segments *idata, void *data)
         }
       }
       if (max_prob > DETECTION_THRESHOLD) {
-        idata->segment_map[i][j] = max_idx;
+        idata->segment_map[j][i] = max_idx;
       }
     }
   }
