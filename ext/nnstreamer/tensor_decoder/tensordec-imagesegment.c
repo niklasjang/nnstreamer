@@ -56,7 +56,7 @@ typedef struct
 
   guint width;
   guint height;
-  guint ***segment_map;
+  guint **segment_map;
 } image_segments;
 
 static int
@@ -66,9 +66,9 @@ _init_modes (image_segments *idata)
     int i;
     idata->width = TFLITE_IMAGE_SIZE;
     idata->height = TFLITE_IMAGE_SIZE;
-    idata->segment_map = g_new0 (guint **, TFLITE_IMAGE_SIZE);
-    for (i = 0; i < TFLITE_IMAGE_SIZE; i++) {
-      idata->segment_map[i] = g_new0 (guint *, TFLITE_IMAGE_SIZE);
+    idata->segment_map = g_new0 (guint *, idata->height);
+    for (i = 0; i < idata->height; i++) {
+      idata->segment_map[i] = g_new0 (guint, idata->width);
     }
     return TRUE;
   }
@@ -102,13 +102,10 @@ _exit_modes (image_segments *idata)
 static void
 _free_segment_map (image_segments* idata)
 {
-  guint i, j;
+  int i;
   
   if (idata->segment_map) {
     for (i = 0; i < idata->height; i++) {
-      for (j = 0; j < idata->width; j++) {
-        g_free (idata->segment_map[i][j]);
-      }
       g_free (idata->segment_map[i]);
     }
     g_free (idata->segment_map);
@@ -146,7 +143,6 @@ is_setOption (void **pdata, int opNum, const char *param)
     }
   
     if (idata->mode != previous && idata->mode != UNKNOWN_IMAGE_SEGMENT) {
-      g_print("\n\nSet Option\n\n");
       return _init_modes (idata);
     }
     return TRUE;
@@ -168,7 +164,7 @@ is_getOutCaps (void **pdata, const GstTensorsConfig * config)
   GST_INFO ("Num Tensors = %d", config->info.num_tensors);
   g_return_val_if_fail (config->info.num_tensors >= 1, NULL);
 
-  str = g_strdup_printf ("video/x-raw, format = RGB, "
+  str = g_strdup_printf ("video/x-raw, format = RGBA, "
         "width = %u, height = %u"
         , idata->width, idata->height);
   caps = gst_caps_from_string (str);
@@ -196,13 +192,51 @@ is_getTransformSize (void **pdata, const GstTensorsConfig * config,
 static void
 color (image_segments *idata, GstMapInfo* out_info)
 {
+  uint32_t *frame = (uint32_t *) out_info->data;
+  uint32_t *pos;
+  int i, j;
 
+  for (i = 0; i < idata->height; i++) {
+    for (j = 0; j < idata->width; j++) {
+      int label_idx = idata->segment_map[i][j];
+      pos = &frame[i*idata->width +j];
+      if (label_idx != 0) {
+        *pos = 0xFF000033;
+      } else {
+        *pos = 0x00000000;
+      }
+    }
+  }
 }
 
 static void
 set_segment_map (image_segments *idata, void *data)
 {
+  float *prob_map = (float *) data;
+  int idx, i, j;
+  int max_idx;
+  float max_prob;
 
+  for (i = 0; i < idata->height; i++) {
+    memset (idata->segment_map[i], 0, idata->width * sizeof(guint));
+  }
+
+  for (i = 0; i < idata->height; i++) {
+    for (j = 0; j < idata->width; j++) {
+      max_idx = 0;
+      max_prob = prob_map[i * TOTAL_LABELS + j * idata->width * TOTAL_LABELS];
+      for (idx = 1; idx < TOTAL_LABELS; idx++) {
+        float prob = prob_map[i * TOTAL_LABELS + j * idata->width * TOTAL_LABELS + idx];
+        if (prob > max_prob) {
+          max_prob = prob;
+          max_idx = idx;
+        }
+      }
+      if (max_prob > DETECTION_THRESHOLD) {
+        idata->segment_map[i][j] = max_idx;
+      }
+    }
+  }
 }
 
 /** @brief tensordec-plugin's GstTensorDecoderDef callback */
@@ -211,7 +245,7 @@ is_decode (void **pdata, const GstTensorsConfig * config,
     const GstTensorMemory * input, GstBuffer * outbuf)
 {
   image_segments *idata = *pdata;
-  const size_t size = idata->width * idata->height * 3;
+  const size_t size = idata->width * idata->height * 4;
   GstMapInfo out_info;
   GstMemory *out_mem;
   
@@ -230,6 +264,7 @@ is_decode (void **pdata, const GstTensorsConfig * config,
 
   if (idata->mode == TFLITE_IMAGE_SEGMENT) {
     g_assert (config->info.info[0].type == _NNS_FLOAT32);
+    g_assert (config->info.info[0].dimension[0] == TOTAL_LABELS);
     set_segment_map (idata, input->data);
   }
 
@@ -245,7 +280,7 @@ is_decode (void **pdata, const GstTensorsConfig * config,
 
 static gchar decoder_subplugin_image_segment[] = "image_segment";
 
-/** @brief Direct-Video tensordec-plugin GstTensorDecoderDef instance */
+/** @brief Image-Segmentation tensordec-plugin GstTensorDecoderDef instance */
 static GstTensorDecoderDef imageSegment = {
   .modename = decoder_subplugin_image_segment,
   .init = is_init,
